@@ -1,0 +1,135 @@
+#!/usr/bin/env python3
+"""
+OpenGeoAI – Analyse d’images satellites assistée par IA
+---------------------------------------------------------
+Cette application permet d’uploader une image satellite, d’effectuer une détection
+d’objets (routes, bâtiments, incendies, etc.) à l’aide d’un modèle (ici simulé),
+et d’afficher les résultats sur une carte interactive.
+
+Stack suggérée : Python, Streamlit, PyTorch (pour le modèle – ici simulé),
+et Folium pour la visualisation sur carte.
+
+Auteur : ChatGPT
+Date   : 2025-04-16
+"""
+
+import os
+import io
+import random
+import base64
+import logging
+import time
+
+import streamlit as st
+from PIL import Image
+import numpy as np
+
+# Pour la détection d’objets avec PyTorch – dans cet exemple, nous simulerons
+# une détection. Pour un modèle réel, vous pourriez utiliser :
+#   from yolov5 import YOLOv5
+#   model = YOLOv5("yolov5s.pt", device="cpu")
+#
+# import torch
+
+# Pour la carte interactive
+import folium
+from streamlit_folium import st_folium
+
+# =============================================================================
+# Configuration du logger
+# =============================================================================
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(levelname)s - %(message)s")
+logger = logging.getLogger("OpenGeoAI")
+
+# =============================================================================
+# Module de détection d'objets (dummy)
+# =============================================================================
+def detect_objects(image: Image.Image) -> list:
+    """
+    Simule la détection d'objets sur une image satellite.
+    Pour un modèle réel, intégrez ici un modèle YOLO, Segment Anything, etc.
+    
+    Retourne une liste de dictionnaires, chacun représentant une détection avec :
+      - label      : type d'objet détecté (ex. "road", "building", "fire")
+      - confidence : score de confiance
+      - bbox       : coordonnées de la boîte (x, y, width, height) en pixels
+    
+    Pour la démonstration, nous renvoyons des résultats simulés.
+    """
+    # Simulation simple (vous pouvez ajuster les valeurs ou générer aléatoirement)
+    detections = [
+        {"label": "road", "confidence": 0.92, "bbox": [50, 30, 150, 40]},
+        {"label": "building", "confidence": 0.87, "bbox": [220, 180, 100, 120]},
+        {"label": "fire", "confidence": 0.78, "bbox": [350, 260, 80, 80]}
+    ]
+    logger.info(f"Détections simulées : {detections}")
+    return detections
+
+# =============================================================================
+# Génération de la carte interactive avec Folium
+# =============================================================================
+def generate_map(detections: list, center_lat: float, center_lon: float) -> str:
+    """
+    Crée une carte Folium centrée sur (center_lat, center_lon)
+    et y ajoute des marqueurs pour chaque objet détecté.
+    
+    Pour simplifier, la position de chaque détection est générée autour du centre.
+    Dans un cas réel, les images satellite seraient géoréférencées.
+    """
+    # Créer la carte centrée sur les coordonnées fournies
+    m = folium.Map(location=[center_lat, center_lon], zoom_start=12)
+    
+    # Pour chaque détection, on simule une position autour du centre (avec un petit offset)
+    for det in detections:
+        label = det["label"]
+        confidence = det["confidence"]
+        # Calculer un offset aléatoire (en degrés) par exemple ±0.01
+        offset_lat = random.uniform(-0.01, 0.01)
+        offset_lon = random.uniform(-0.01, 0.01)
+        marker_lat = center_lat + offset_lat
+        marker_lon = center_lon + offset_lon
+        folium.Marker(
+            location=[marker_lat, marker_lon],
+            popup=f"Objet: {label}\nConfiance: {confidence:.2f}",
+            icon=folium.Icon(color="blue" if label != "fire" else "red", icon="info-sign")
+        ).add_to(m)
+    # Retourner la carte sous forme de HTML
+    return m._repr_html_()
+
+# =============================================================================
+# Interface Streamlit pour l'application OpenGeoAI
+# =============================================================================
+def main():
+    st.title("OpenGeoAI – Analyse d’images satellites assistée par IA")
+    st.write("Téléchargez une image satellite, lancez l’analyse de détection d’objets, et visualisez les résultats sur une carte interactive.")
+
+    # Upload de l'image
+    uploaded_file = st.file_uploader("Choisissez une image satellite", type=["png", "jpg", "jpeg"])
+    
+    # Optionnel : saisir les coordonnées géographiques du centre (pour la carte)
+    default_lat = st.number_input("Latitude du centre", value=40.7128, format="%.4f")  # exemple : New York City
+    default_lon = st.number_input("Longitude du centre", value=-74.0060, format="%.4f")
+    
+    if uploaded_file is not None:
+        try:
+            image = Image.open(uploaded_file)
+            st.image(image, caption="Image satellite chargée", use_column_width=True)
+            
+            if st.button("Analyser l'image"):
+                with st.spinner("Analyse en cours..."):
+                    detections = detect_objects(image)
+                    # Affichage des résultats de détection
+                    st.subheader("Objets détectés")
+                    for det in detections:
+                        st.write(f"- {det['label']} (confiance {det['confidence']:.2f}) | bbox : {det['bbox']}")
+                    
+                    # Génération de la carte interactive
+                    map_html = generate_map(detections, default_lat, default_lon)
+                    st.subheader("Carte interactive des objets détectés")
+                    st.components.v1.html(map_html, height=500, scrolling=True)
+        except Exception as e:
+            st.error(f"Erreur lors du traitement de l'image : {e}")
+            logger.error(f"Erreur dans main() : {e}")
+
+if __name__ == "__main__":
+    main()
